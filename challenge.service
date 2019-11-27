@@ -1,0 +1,8 @@
+[Unit]
+Description=Challenge 2019
+
+[Service]
+ExecStart=/home/rusnasonov/challenge2019
+
+[Install]
+WantedBy=multi-user.target
