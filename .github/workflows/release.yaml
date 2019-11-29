@@ -1,0 +1,22 @@
+on:
+  push:
+    tags:
+      - 'v*'
+
+name: release
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        build-os: [windows, linux, darwin]
+        build-arch: [amd64, 386]
+    runs-on: ubuntu-latest
+    steps:
+        - name: checkout
+          uses: actions/checkout@master
+        - name: build
+          uses: actions/setup-go@v1
+          with:
+            go-version: '1.13'
+        - run: env GOOS=${{ matrix.build-os }} GOARCH=${{ matrix.build-arch}} go build -o challenge2019_${{ matrix.build-os }}_${{ matrix.build-arch}} .
