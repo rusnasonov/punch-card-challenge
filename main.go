@@ -1,10 +1,13 @@
 package main
 
 import (
+	"bufio"
 	"bytes"
 	"crypto/md5"
 	"encoding/hex"
+	"flag"
 	"fmt"
+	"io"
 	"log"
 	"math/rand"
 	"net"
@@ -14,11 +17,9 @@ import (
 	"time"
 )
 
-func main() {
-	errorLog := log.New(os.Stdout, "ERROR: ", log.Ldate|log.Ltime|log.Lshortfile)
-	infoLog := log.New(os.Stdout, "INFO: ", log.Ldate|log.Ltime|log.Lshortfile)
+func challenge(host, port string, infoLog, errorLog *log.Logger) {
 	rand.Seed(time.Now().UnixNano())
-	listener, err := net.Listen("tcp", "[::]:2019")
+	listener, err := net.Listen("tcp", fmt.Sprintf("%s:%s", host, port))
 	if err != nil {
 		errorLog.Fatal(err)
 	}
@@ -31,6 +32,52 @@ func main() {
 			continue
 		}
 		go handleRequest(conn, infoLog, errorLog)
+	}
+}
+
+func solve(host, port string, infoLog, errorLog *log.Logger) {
+	conn, err := net.Dial("tcp", fmt.Sprintf("%s:%s", host, port))
+	buf := make([]byte, 1024)
+	if err != nil {
+		errorLog.Fatal(err)
+	}
+	_, err = bufio.NewReader(conn).Read(buf)
+	fmt.Fprint(conn, "start")
+	for {
+		n, err := bufio.NewReader(conn).Read(buf)
+		if err == io.EOF {
+			infoLog.Println("== FINISH ==")
+			return
+		}
+		if err != nil {
+			errorLog.Fatal(err)
+		}
+		infoLog.Println(string(buf))
+		card := bytes.Split(
+			bytes.Trim(buf[:n], "\n"),
+			[]byte("\n"),
+		)
+		decoded, err := punchCardDecoder(card)
+		if err != nil {
+			errorLog.Fatal(err)
+		}
+		fmt.Fprint(conn, strings.Trim(decoded, " "))
+		infoLog.Println(decoded)
+		time.Sleep(time.Millisecond * 100)
+	}
+}
+
+func main() {
+	errorLog := log.New(os.Stdout, "ERROR: ", log.Ldate|log.Ltime|log.Lshortfile)
+	infoLog := log.New(os.Stdout, "INFO: ", log.Ldate|log.Ltime|log.Lshortfile)
+	isSolve := flag.Bool("solve", false, "run solver")
+	host := flag.String("host", "[::]", "host")
+	port := flag.String("port", "2019", "port")
+	flag.Parse()
+	if *isSolve {
+		solve(*host, *port, infoLog, errorLog)
+	} else {
+		challenge(*host, *port, infoLog, errorLog)
 	}
 }
 
@@ -108,7 +155,7 @@ func handleRequest(conn net.Conn, infoLog, errorLog *log.Logger) {
 			return
 		}
 		if strings.Trim(string(buf[:n]), "\n") != hash {
-			infoLog.Printf("%s Fail to decode message. Attempt %d, Exprected: %s, Got: %s\n",
+			infoLog.Printf("%s Fail to decode message. Attempt %d, Expected: %s, Got: %s\n",
 				conn.RemoteAddr().String(),
 				attempts,
 				hash,
@@ -137,11 +184,9 @@ func handleRequest(conn net.Conn, infoLog, errorLog *log.Logger) {
 }
 
 func writeCard(conn net.Conn, card [][]byte) error {
-	_, err := conn.Write(bytes.Join(card, []byte("\n")))
-	if err != nil {
-		return err
-	}
-	_, err = conn.Write([]byte("\n"))
+	_, err := conn.Write(
+		append(bytes.Join(card, []byte("\n")), []byte("\n")...),
+	)
 	if err != nil {
 		return err
 	}
@@ -180,54 +225,120 @@ func makePunchCard(value string) ([][]byte, error) {
 
 func punchCardEncoder(value string) ([][]byte, error) {
 	buf := [][]byte{}
-	encodingTable := map[rune][]byte{
-		' ': []byte("############"),
-		'&': []byte("X###########"),
-		'-': []byte("#X##########"),
-		'0': []byte("##X#########"),
-		'1': []byte("###X########"),
-		'2': []byte("####X#######"),
-		'3': []byte("#####X######"),
-		'4': []byte("######X#####"),
-		'5': []byte("#######X####"),
-		'6': []byte("########X###"),
-		'7': []byte("#########X##"),
-		'8': []byte("##########X#"),
-		'9': []byte("###########X"),
-		'A': []byte("X##X########"),
-		'B': []byte("X###X#######"),
-		'C': []byte("X####X######"),
-		'D': []byte("X#####X#####"),
-		'E': []byte("X######X####"),
-		'F': []byte("X#######X###"),
-		'G': []byte("X########X##"),
-		'H': []byte("X#########X#"),
-		'I': []byte("X##########X"),
-		'J': []byte("#X#X########"),
-		'K': []byte("#X##X#######"),
-		'L': []byte("#X###X######"),
-		'M': []byte("#X####X#####"),
-		'N': []byte("#X#####X####"),
-		'O': []byte("#X######X###"),
-		'P': []byte("#X#######X##"),
-		'Q': []byte("#X########X#"),
-		'R': []byte("#X#########X"),
-		'/': []byte("##XX########"),
-		'S': []byte("##X#X#######"),
-		'T': []byte("##X##X######"),
-		'U': []byte("##X###X#####"),
-		'V': []byte("##X####X####"),
-		'W': []byte("##X#####X###"),
-		'X': []byte("##X######X##"),
-		'Y': []byte("##X#######X#"),
-		'Z': []byte("##X########X"),
+	encodingTable := map[rune]string{
+		' ': "############",
+		'&': "X###########",
+		'-': "#X##########",
+		'0': "##X#########",
+		'1': "###X########",
+		'2': "####X#######",
+		'3': "#####X######",
+		'4': "######X#####",
+		'5': "#######X####",
+		'6': "########X###",
+		'7': "#########X##",
+		'8': "##########X#",
+		'9': "###########X",
+		'A': "X##X########",
+		'B': "X###X#######",
+		'C': "X####X######",
+		'D': "X#####X#####",
+		'E': "X######X####",
+		'F': "X#######X###",
+		'G': "X########X##",
+		'H': "X#########X#",
+		'I': "X##########X",
+		'J': "#X#X########",
+		'K': "#X##X#######",
+		'L': "#X###X######",
+		'M': "#X####X#####",
+		'N': "#X#####X####",
+		'O': "#X######X###",
+		'P': "#X#######X##",
+		'Q': "#X########X#",
+		'R': "#X#########X",
+		'/': "##XX########",
+		'S': "##X#X#######",
+		'T': "##X##X######",
+		'U': "##X###X#####",
+		'V': "##X####X####",
+		'W': "##X#####X###",
+		'X': "##X######X##",
+		'Y': "##X#######X#",
+		'Z': "##X########X",
 	}
 	for _, char := range value {
 		s, exists := encodingTable[char]
 		if !exists {
 			return buf, fmt.Errorf("Can't encode char '%v'", char)
 		}
-		buf = append(buf, s)
+		buf = append(buf, []byte(s))
 	}
 	return buf, nil
+}
+
+func punchCardDecoder(card [][]byte) (string, error) {
+	decoded := ""
+	decodingTable := map[string]rune{
+		"############": ' ',
+		"X###########": '&',
+		"#X##########": '-',
+		"##X#########": '0',
+		"###X########": '1',
+		"####X#######": '2',
+		"#####X######": '3',
+		"######X#####": '4',
+		"#######X####": '5',
+		"########X###": '6',
+		"#########X##": '7',
+		"##########X#": '8',
+		"###########X": '9',
+		"X##X########": 'A',
+		"X###X#######": 'B',
+		"X####X######": 'C',
+		"X#####X#####": 'D',
+		"X######X####": 'E',
+		"X#######X###": 'F',
+		"X########X##": 'G',
+		"X#########X#": 'H',
+		"X##########X": 'I',
+		"#X#X########": 'J',
+		"#X##X#######": 'K',
+		"#X###X######": 'L',
+		"#X####X#####": 'M',
+		"#X#####X####": 'N',
+		"#X######X###": 'O',
+		"#X#######X##": 'P',
+		"#X########X#": 'Q',
+		"#X#########X": 'R',
+		"##XX########": '/',
+		"##X#X#######": 'S',
+		"##X##X######": 'T',
+		"##X###X#####": 'U',
+		"##X####X####": 'V',
+		"##X#####X###": 'W',
+		"##X######X##": 'X',
+		"##X#######X#": 'Y',
+		"##X########X": 'Z',
+	}
+	if len(card) != 12 {
+		return "", fmt.Errorf("Wrong row count. Got %d, expected 12", len(card))
+	}
+	for row := 0; row < 12; row++ {
+		if len(card[row]) != 80 {
+			return "", fmt.Errorf("Wrong column count [row %d]. Got %d, expected 80", row, len(card))
+		}
+	}
+	for column := 0; column < 80; column++ {
+		buf := []byte{}
+		for row := 0; row < 12; row++ {
+			buf = append(buf, card[row][column])
+		}
+		s, exists := decodingTable[string(buf)]
+		if !exists {
+			return "", fmt.Errorf("Can't decode column %s", string(buf))
+		}
+		decoded += string(s)
+	}
+	return decoded, nil
 }
