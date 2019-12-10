@@ -5,15 +5,25 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "Launch",
+            "name": "Challenge",
+            "type": "go",
+            "request": "launch",
+            "mode": "auto",
+            "program": "${fileDirname}",
+            "env": {
+                "CHALLENGE_KEY": "MERRY CHRISTMAS & HAPPY NEW YEAR 2020 MY DEAR FRIEND"
+            },
+            "args": []
+        },
+        {
+            "name": "Solver",
             "type": "go",
             "request": "launch",
             "mode": "auto",
             "program": "${fileDirname}",
             "env": {},
             "args": [
-                "-solve=true",
-                "-host=challenge.rusnasonov.com"
+                "-solve=true"
             ]
         }
     ]

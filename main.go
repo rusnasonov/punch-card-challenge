@@ -17,7 +17,7 @@ import (
 	"time"
 )
 
-func challenge(host, port string, infoLog, errorLog *log.Logger) {
+func challenge(host, port, key string, infoLog, errorLog *log.Logger) {
 	rand.Seed(time.Now().UnixNano())
 	listener, err := net.Listen("tcp", fmt.Sprintf("%s:%s", host, port))
 	if err != nil {
@@ -31,7 +31,7 @@ func challenge(host, port string, infoLog, errorLog *log.Logger) {
 			errorLog.Println(err)
 			continue
 		}
-		go handleRequest(conn, infoLog, errorLog)
+		go handleRequest(conn, key, infoLog, errorLog)
 	}
 }
 
@@ -73,20 +73,21 @@ func main() {
 	isSolve := flag.Bool("solve", false, "run solver")
 	host := flag.String("host", "[::]", "host")
 	port := flag.String("port", "2019", "port")
+	key := os.Getenv("CHALLENGE_KEY")
 	flag.Parse()
 	if *isSolve {
 		solve(*host, *port, infoLog, errorLog)
 	} else {
-		challenge(*host, *port, infoLog, errorLog)
+		challenge(*host, *port, key, infoLog, errorLog)
 	}
 }
 
-func handleRequest(conn net.Conn, infoLog, errorLog *log.Logger) {
+func handleRequest(conn net.Conn, key string, infoLog, errorLog *log.Logger) {
 	defer conn.Close()
 	ooops := []byte("OOOooooops :(\n")
 	ooopsSlow := []byte("OOOooooops, so slooow :(\n")
 	firstMsg := "THIS IS TRUE WAY - TRY HARDER"
-	final := "THIS IS KEY"
+	final := key
 	maxAttempts := 100
 	timeout := time.Second * 3
 	buf := make([]byte, 255)
